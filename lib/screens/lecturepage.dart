@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -25,7 +26,7 @@ class LecturePage extends StatelessWidget {
                   .doc(subjectName)
                   .collection('lectures')
                   .orderBy('created_at',
-                      descending: true) // ترتيب العناصر حسب الأحدث
+                      descending: true)
                   .snapshots(),
               builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -58,88 +59,108 @@ class LecturePage extends StatelessWidget {
                   return ListView(
                     padding: const EdgeInsets.all(8.0),
                     children: snapshot.data!.docs.map((doc) {
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8.0),
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(12.0),
-                          onTap: () async {
-                            showLoadingDialog(context); // إظهار مؤشر التحميل
-                            final url = doc['file_url'];
-                            final file =
-                                await downloadPDFFromFirebase(url, context);
-                            Navigator.pop(context); // إخفاء مؤشر التحميل
-                            if (file != null) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => PDFViewerPage(
-                                    file: file,
-                                    title: doc['file_name'],
-                                  ),
+                      return FutureBuilder<String>(
+                        future: getFileSize(doc['file_url']),
+                        builder: (context, fileSizeSnapshot) {
+                          String fileSize = fileSizeSnapshot.data ?? "غير متاح";
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 8.0),
+                            elevation: 4,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.all(12.0),
+                              onTap: () async {
+                                showLoadingDialog(
+                                    context); 
+                                final url = doc['file_url'];
+                                final file =
+                                    await downloadPDFFromFirebase(url, context);
+                                Navigator.pop(context);
+                                if (file != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => PDFViewerPage(
+                                        file: file,
+                                        title: doc['file_name'],
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                              leading: const Icon(Icons.picture_as_pdf,
+                                  color: Colors.redAccent, size: 40),
+                              title: Text(
+                                doc['file_name'],
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
                                 ),
-                              );
-                            }
-                          },
-                          leading: const Icon(Icons.picture_as_pdf,
-                              color: Colors.redAccent, size: 40),
-                          title: Text(
-                            doc['file_name'],
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                          subtitle: Text(
-                            "تمت الإضافة في: ${formatTimestamp(doc['created_at'])}",
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.download,
-                                    color: Colors.blue),
-                                onPressed: () async {
-                                  showLoadingDialog(
-                                      context); // إظهار مؤشر التحميل
-                                  final url = doc['file_url'];
-                                  try {
-                                    await launch(url);
-                                  } catch (e) {
-                                    print(e);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                          content:
-                                              Text('لا يمكن فتح الرابط: $e')),
-                                    );
-                                  } finally {
-                                    Navigator.pop(
-                                        context); // إخفاء مؤشر التحميل
-                                  }
-                                },
                               ),
-                              IconButton(
-                                icon:
-                                    const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () async {
-                                  bool confirmDelete =
-                                      await showDeleteConfirmationDialog(
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "تمت الإضافة في: ${formatTimestamp(doc['created_at'])}",
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  Text(
+                                    "حجم الملف: $fileSize",
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.download,
+                                        color: Colors.blue),
+                                    onPressed: () async {
+                                      showLoadingDialog(
                                           context);
-                                  if (confirmDelete) {
-                                    await deleteLecture(doc, context);
-                                  }
-                                },
+                                      final url = doc['file_url'];
+                                      try {
+                                        await launch(url);
+                                      } catch (e) {
+                                        print(e);
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                              content: Text(
+                                                  'لا يمكن فتح الرابط: $e')),
+                                        );
+                                      } finally {
+                                        Navigator.pop(
+                                            context); 
+                                      }
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.red),
+                                    onPressed: () async {
+                                      bool confirmDelete =
+                                          await showDeleteConfirmationDialog(
+                                              context);
+                                      if (confirmDelete) {
+                                        await deleteLecture(doc, context);
+                                      }
+                                    },
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       );
                     }).toList(),
                   );
@@ -169,7 +190,7 @@ class LecturePage extends StatelessWidget {
   Future<File?> downloadPDFFromFirebase(
       String url, BuildContext context) async {
     try {
-      await signInAnonymously(); // تسجيل الدخول بشكل مجهول قبل محاولة التنزيل
+      await signInAnonymously();
       final ref = FirebaseStorage.instance.refFromURL(url);
       final bytes = await ref.getData();
       if (bytes != null) {
@@ -187,14 +208,31 @@ class LecturePage extends StatelessWidget {
     return null;
   }
 
+  Future<String> getFileSize(String url) async {
+    try {
+      final ref = FirebaseStorage.instance.refFromURL(url);
+      final metadata = await ref.getMetadata();
+      final bytes = metadata.size ?? 0;
+      return formatBytes(bytes, 2);
+    } catch (e) {
+      print("Error getting file size: $e");
+      return "غير متاح";
+    }
+  }
+
+  String formatBytes(int bytes, int decimals) {
+    if (bytes == 0) return "0 B";
+    const suffixes = ["B", "KB", "MB", "GB", "TB"];
+    var i = (log(bytes) / log(1024)).floor();
+    return '${(bytes / pow(1024, i)).toStringAsFixed(decimals)} ${suffixes[i]}';
+  }
+
   Future<void> deleteLecture(DocumentSnapshot doc, BuildContext context) async {
     try {
-      showLoadingDialog(context); // إظهار مؤشر التحميل
-      // حذف الملف من Firebase Storage
+      showLoadingDialog(context);
       final ref = FirebaseStorage.instance.refFromURL(doc['file_url']);
       await ref.delete();
 
-      // حذف المستند من Firestore
       await FirebaseFirestore.instance
           .collection('subjects')
           .doc(subjectName)
@@ -202,12 +240,12 @@ class LecturePage extends StatelessWidget {
           .doc(doc.id)
           .delete();
 
-      Navigator.pop(context); // إخفاء مؤشر التحميل
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حذف المحاضرة بنجاح')),
       );
     } catch (e) {
-      Navigator.pop(context); // إخفاء مؤشر التحميل في حالة حدوث خطأ
+      Navigator.pop(context);
       print("Error deleting lecture: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('خطأ أثناء حذف المحاضرة: $e')),
@@ -226,14 +264,14 @@ class LecturePage extends StatelessWidget {
                 TextButton(
                   child: const Text("إلغاء"),
                   onPressed: () {
-                    Navigator.of(context).pop(false); // إغلاق الحوار بدون حذف
+                    Navigator.of(context).pop(false); 
                   },
                 ),
                 TextButton(
                   child: const Text("حذف"),
                   onPressed: () {
                     Navigator.of(context)
-                        .pop(true); // إغلاق الحوار مع تأكيد الحذف
+                        .pop(true); 
                   },
                 ),
               ],

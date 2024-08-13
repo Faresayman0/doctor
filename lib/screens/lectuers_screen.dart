@@ -111,8 +111,10 @@ class _LecturesScreenState extends State<LecturesScreen> {
             label: 'التاسكات',
           ),
         ],
+        selectedFontSize: 20,
+        unselectedItemColor: Colors.black,
         currentIndex: _selectedIndex,
-        selectedItemColor: Colors.amber[800],
+        selectedItemColor: Colors.white,
         onTap: _onItemTapped,
       ),
       floatingActionButton: FloatingActionButton.extended(
